@@ -19,6 +19,38 @@
     /**
      * 配置区域 - 根据你的需求修改
      */
+    /**
+     * @typedef {object} SuccessIndicatorConfig
+     * @property {'text'|'element'} type - 签到成功的标识类型，'text' 表示页面文本，'element' 表示页面元素。
+     * @property {string|string[]} value - 如果 type 是 'text'，则为包含成功文本的字符串或字符串数组；如果 type 是 'element'，则为成功元素的 CSS 选择器。
+     */
+
+    /**
+     * @typedef {object} DebugConfig
+     * @property {boolean} skipTimeCheck - 是否跳过时间检查，强制执行签到逻辑。
+     * @property {boolean} verbose - 是否显示详细的调试日志。
+     * @property {boolean} simulateClick - 是否模拟点击签到按钮，而不实际执行点击操作。
+     */
+
+    /**
+     * @typedef {object} ScriptConfig
+     * @property {string} signInUrl - 需要签到的网站 URL。
+     * @property {string} signInButtonSelector - 签到按钮的 CSS 选择器。
+     * @property {SuccessIndicatorConfig} successIndicator - 签到成功的标识配置。
+     * @property {number} checkInterval - 签到频率（小时）。
+     * @property {number} autoCheckInterval - 自动检查间隔（分钟）。
+     * @property {number} autoCloseDelay - 签到成功后自动关闭页面前等待的时间（毫秒）。
+     * @property {boolean} checkOnAnyWebsite - 是否在任何网站上检查签到状态。
+     * @property {boolean} autoCloseAfterSuccess - 是否在签到成功后自动关闭页面。
+     * @property {boolean} showNotification - 是否显示通知。
+     * @property {boolean} debugMode - 是否启用调试模式。
+     * @property {DebugConfig} debug - 调试选项配置。
+     */
+
+    /**
+     * 配置区域 - 根据你的需求修改
+     * @type {ScriptConfig}
+     */
     const CONFIG = {
         // 基本设置
         signInUrl: 'https://www.iamtxt.com',
@@ -52,24 +84,40 @@
     /**
      * 工具函数
      */
-    // 调试日志函数
+    /**
+     * 调试日志函数，仅在调试模式和详细模式下输出日志。
+     * @param {...any} args - 要输出的日志内容。
+     */
     const debugLog = (...args) => {
         if (CONFIG.debugMode && CONFIG.debug.verbose) {
             console.log('%c[自动签到调试]', 'color: #4CAF50; font-weight: bold;', ...args);
         }
     };
 
-    // 格式化时间
+    /**
+     * 格式化时间戳为本地时间字符串。
+     * @param {number} timestamp - 时间戳（毫秒）。
+     * @returns {string} 格式化后的时间字符串。
+     */
     const formatTime = (timestamp) => {
         return new Date(timestamp).toLocaleString();
     };
 
-    // 计算时间差（分钟）
+    /**
+     * 计算两个时间戳之间的分钟差。
+     * @param {number} time1 - 第一个时间戳（毫秒）。
+     * @param {number} time2 - 第二个时间戳（毫秒）。
+     * @returns {number} 分钟差。
+     */
     const getTimeDiffInMinutes = (time1, time2) => {
         return Math.floor((time1 - time2) / 60000);
     };
 
-    // 显示通知
+    /**
+     * 显示通知。
+     * @param {string} title - 通知标题。
+     * @param {string} text - 通知内容。
+     */
     const showNotification = (title, text) => {
         debugLog('显示通知:', title, text);
         // 只在签到页面或调试模式下显示通知
@@ -82,7 +130,11 @@
         }
     };
 
-    // 安全的DOM查询
+    /**
+     * 安全地执行 DOM 查询，捕获潜在错误。
+     * @param {string} selector - CSS 选择器。
+     * @returns {Element|null} 找到的元素或 null。
+     */
     const safeQuerySelector = (selector) => {
         try {
             return document.querySelector(selector);
@@ -92,9 +144,17 @@
         }
     };
 
-    // 创建UI元素的辅助函数
+    /**
+     * UI 辅助函数对象，用于创建和操作页面元素。
+     */
     const UI = {
-        // 创建元素并设置属性
+        /**
+         * 创建一个 DOM 元素并设置属性和样式。
+         * @param {string} tag - 元素标签名。
+         * @param {object} [attributes={}] - 元素属性对象。
+         * @param {object} [styles={}] - 元素样式对象。
+         * @returns {Element} 创建的 DOM 元素。
+         */
         createElement: (tag, attributes = {}, styles = {}) => {
             const element = document.createElement(tag);
 
@@ -115,7 +175,13 @@
             return element;
         },
 
-        // 添加信息行
+        /**
+         * 在指定的容器中添加一个信息行（标签和值）。
+         * @param {Element} container - 信息行要添加到的容器元素。
+         * @param {string} label - 信息标签文本。
+         * @param {string} value - 信息值文本。
+         * @returns {Element} 值所在的 span 元素。
+         */
         addInfoRow: (container, label, value) => {
             const row = UI.createElement('div', {}, { margin: '5px 0' });
 
@@ -135,9 +201,15 @@
             return valueSpan;
         },
 
-        // 创建按钮
+        /**
+         * 创建一个按钮元素。
+         * @param {string} text - 按钮文本。
+         * @param {function} onClick - 按钮点击事件处理函数。
+         * @param {string} [color='#4CAF50'] - 按钮背景颜色。
+         * @returns {HTMLButtonElement} 创建的按钮元素。
+         */
         createButton: (text, onClick, color = '#4CAF50') => {
-            return UI.createElement('button',
+            const button = UI.createElement('button',
                 { textContent: text },
                 {
                     margin: '5px 5px 5px 0',
@@ -149,9 +221,13 @@
                     cursor: 'pointer'
                 }
             );
+            button.addEventListener('click', onClick);
+            return button;
         },
 
-        // 调试面板样式
+        /**
+         * 调试面板的 CSS 样式对象。
+         */
         debugPanelStyles: {
             position: 'fixed',
             bottom: '10px',
@@ -171,12 +247,26 @@
     /**
      * 状态变量
      */
-    // 获取时间信息
+    /**
+     * 当前时间戳（毫秒）。
+     * @type {number}
+     */
     const currentTime = new Date().getTime();
+    /**
+     * 上次成功签到的时间戳（毫秒），从 Tampermonkey 存储中获取，默认为 0。
+     * @type {number}
+     */
     const lastSignTime = GM_getValue('lastSignTime', 0);
+    /**
+     * 上次执行自动检查的时间戳（毫秒），从 Tampermonkey 存储中获取，默认为 0。
+     * @type {number}
+     */
     const lastCheckTime = GM_getValue('lastCheckTime', 0);
 
-    // 检查当前页面是否是签到页面 (更精确的匹配)
+    /**
+     * 判断当前页面是否是签到页面。
+     * @type {boolean}
+     */
     const isSignInPage = (() => {
         try {
             const currentUrl = window.location;
@@ -190,14 +280,22 @@
         }
     })();
 
-    // 检查是否需要签到
+    /**
+     * 判断是否需要执行签到操作。
+     * 如果启用了调试模式的 skipTimeCheck 选项，则始终为 true。
+     * 否则，判断当前时间距离上次签到时间是否超过设定的签到间隔。
+     * @type {boolean}
+     */
     const needToSign = CONFIG.debug.skipTimeCheck ||
-                      (currentTime - lastSignTime) > (CONFIG.checkInterval * 60 * 60 * 1000);
+                       (currentTime - lastSignTime) > (CONFIG.checkInterval * 60 * 60 * 1000);
 
     /**
      * 核心功能函数
      */
-    // 打开签到页面
+    /**
+     * 打开签到页面。
+     * 使用 GM_openInTab 在新标签页中打开签到 URL。
+     */
     const openSignInPage = () => {
         debugLog('打开签到页面...');
         try {
@@ -208,7 +306,10 @@
         }
     };
 
-    // 尝试签到
+    /**
+     * 尝试在当前页面执行签到操作。
+     * 查找签到按钮并模拟点击，然后等待并检查签到结果。
+     */
     const tryToSignIn = () => {
         // 确保只在签到页面上执行签到操作
         if (!isSignInPage) {
@@ -259,7 +360,11 @@
         }
     };
 
-    // 检查签到结果
+    /**
+     * 检查签到结果。
+     * 根据配置的 successIndicator 类型（文本或元素）检查页面是否包含签到成功的标识。
+     * 如果成功，更新最后签到时间并显示通知；如果配置了自动关闭，则延迟关闭页面。
+     */
     const checkSignInResult = () => {
         // 确保只在签到页面上检查签到结果
         if (!isSignInPage) {
@@ -331,7 +436,11 @@
         }
     };
 
-    // 添加调试面板
+    /**
+     * 添加调试面板到页面。
+     * 仅在调试模式启用时创建并添加调试面板，包含状态信息和手动操作按钮。
+     * @returns {Element|null} 创建的调试面板元素或 null。
+     */
     const addDebugPanel = () => {
         if (!CONFIG.debugMode) return null;
 
@@ -422,7 +531,10 @@
         }
     };
 
-    // 添加自动检查功能的说明到调试面板
+    /**
+     * 更新调试面板，添加自动检查功能相关信息和按钮。
+     * @param {Element} panel - 要更新的调试面板元素。
+     */
     const updateDebugPanelWithAutoCheck = (panel) => {
         if (!panel) return;
 
@@ -460,7 +572,10 @@
         }
     };
 
-    // 主函数
+    /**
+     * 脚本主函数。
+     * 根据当前页面和签到状态执行相应的操作（尝试签到、打开签到页面或执行定期检查）。
+     */
     const main = () => {
         debugLog('脚本已加载');
         debugLog('上次签到时间:', formatTime(lastSignTime));
@@ -515,6 +630,10 @@
     // 执行主函数
     main();
 
+    /**
+     * 脚本的入口点。
+     * 在页面加载完成后执行主函数，并根据配置和当前页面状态决定是否添加调试面板。
+     */
     // 如果在签到页面，添加调试面板
     if (isSignInPage && CONFIG.debugMode) {
         // 等待页面加载完成后添加调试面板
