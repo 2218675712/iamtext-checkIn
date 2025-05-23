@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "iamtext自动网站签到扩展",
+  "version": "0.4",
+  "description": "每天自动进入指定网页进行签到（带调试功能和自动检查）",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "notifications",
+    "alarms"
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.iamtxt.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
