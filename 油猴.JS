@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         iamtext自动网站签到脚本
 // @namespace    http://tampermonkey.net/
-// @version      0.4
-// @description  每天自动进入指定网页进行签到（带调试功能和自动检查）
+// @version      0.5
+// @description  每天自动进入指定网页进行签到（带调试功能和自动检查，避免重复打开标签页）
 // @author       You
 // @match        *://*/*
 // @grant        GM_setValue
@@ -10,6 +10,7 @@
 // @grant        GM_notification
 // @grant        GM_openInTab
 // @grant        window.close
+// @grant        GM_getTabs
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -54,12 +55,12 @@
     const CONFIG = {
         // 基本设置
         signInUrl: 'https://www.iamtxt.com',
-        signInButtonSelector: '.signin',
+        signInButtonSelector: '#signin', // 使用ID选择器更精确
 
         // 签到成功的标识
         successIndicator: {
             type: 'text', // 'text' 或 'element'
-            value: ['今天已经签过了哈', '阅读愉快'] // 成功文本数组或元素选择器
+            value: ['今天已经签过了哈', '阅读愉快', '签到成功', '已签到'] // 增加更多可能的成功文本
         },
 
         // 时间设置
@@ -271,6 +272,13 @@
         try {
             const currentUrl = window.location;
             const signInPageUrl = new URL(CONFIG.signInUrl);
+            
+            // 检查是否是登录页面，如果是则返回false
+            if (currentUrl.pathname.includes('/e/member/login/')) {
+                debugLog('当前是登录页面，不执行签到脚本');
+                return false;
+            }
+            
             // 检查 hostname 和 pathname 是否完全匹配
             return currentUrl.hostname === signInPageUrl.hostname &&
                    currentUrl.pathname === signInPageUrl.pathname;
@@ -293,12 +301,60 @@
      * 核心功能函数
      */
     /**
+     * 检查是否已经打开了 iamtxt 标签页。
+     * @returns {Promise<boolean>} 如果已经打开返回 true，否则返回 false。
+     */
+    const checkIfIamtxtTabOpen = async () => {
+        try {
+            // 尝试获取所有打开的标签页
+            // 注意：由于油猴脚本的安全限制，无法直接访问所有标签页
+            // 这里采用一种间接的方式：尝试通过GM_getTab和GM_getTabs来检查
+            const tabs = await new Promise((resolve) => {
+                if (typeof GM_getTabs !== 'undefined') {
+                    GM_getTabs((tabs) => {
+                        resolve(tabs);
+                    });
+                } else {
+                    // 如果不支持GM_getTabs，则假设标签页未打开
+                    resolve({});
+                }
+            });
+
+            // 检查是否有标签页已经打开了签到页面
+            for (const tabId in tabs) {
+                const tab = tabs[tabId];
+                if (tab && tab.url && tab.url.includes(CONFIG.signInUrl)) {
+                    debugLog('发现已打开的iamtxt标签页:', tab.url);
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (error) {
+            debugLog('检查标签页状态时出错:', error.message);
+            // 如果检查出错，默认返回false，允许打开新标签页
+            return false;
+        }
+    };
+
+    /**
      * 打开签到页面。
      * 使用 GM_openInTab 在新标签页中打开签到 URL。
+     * 在打开前会检查是否已经打开了相同的标签页。
      */
-    const openSignInPage = () => {
-        debugLog('打开签到页面...');
+    const openSignInPage = async () => {
+        debugLog('准备打开签到页面...');
+        
         try {
+            // 检查是否已经打开了iamtxt标签页
+            const isTabOpen = await checkIfIamtxtTabOpen();
+            
+            if (isTabOpen) {
+                debugLog('iamtxt标签页已经打开，避免重复打开');
+                return;
+            }
+            
+            debugLog('打开签到页面...');
             GM_openInTab(CONFIG.signInUrl, { active: true, insert: true });
             debugLog('已请求打开签到页面');
         } catch (error) {
@@ -326,14 +382,16 @@
             // 输出页面上所有可能的按钮，帮助调试
             if (CONFIG.debugMode) {
                 debugLog('页面上的所有按钮:');
-                const buttonSelectors = 'button, input[type="button"], a.btn, .button, [role="button"]';
+                // 更精确的按钮选择器，包括签到按钮相关的各种可能
+                const buttonSelectors = 'button, input[type="button"], a.btn, .button, [role="button"], a.signin, a#signin, .signin, [id*="sign"], [class*="sign"]';
                 const allButtons = document.querySelectorAll(buttonSelectors);
 
                 Array.from(allButtons).forEach((btn, index) => {
                     const text = btn.innerText || btn.value || btn.textContent || '';
                     const classes = btn.className || '';
                     const id = btn.id || '';
-                    debugLog(`按钮 ${index+1}:`, { text, classes, id, element: btn });
+                    const href = btn.href || '';
+                    debugLog(`按钮 ${index+1}:`, { text, classes, id, href, element: btn });
                 });
             }
 
@@ -493,14 +551,18 @@
             panel.appendChild(resetTimeButton);
 
             const findButtonsButton = UI.createButton('查找按钮', () => {
-                const buttonSelectors = 'button, input[type="button"], a.btn, .button, [role="button"]';
+                // 使用与调试功能相同的优化选择器
+                const buttonSelectors = 'button, input[type="button"], a.btn, .button, [role="button"], a.signin, a#signin, .signin, [id*="sign"], [class*="sign"]';
                 const allButtons = document.querySelectorAll(buttonSelectors);
                 debugLog('页面上的所有按钮:', allButtons.length);
 
                 Array.from(allButtons).forEach((btn, index) => {
                     btn.style.border = '2px solid red';
                     const text = btn.innerText || btn.value || btn.textContent || '';
-                    debugLog(`按钮 ${index+1}:`, text, btn);
+                    const classes = btn.className || '';
+                    const id = btn.id || '';
+                    const href = btn.href || '';
+                    debugLog(`按钮 ${index+1}:`, { text, classes, id, href, element: btn });
                 });
             });
             panel.appendChild(findButtonsButton);
@@ -561,7 +623,9 @@
                 debugLog('手动触发检查');
 
                 if (needToSign) {
-                    openSignInPage();
+                    (async () => {
+                        await openSignInPage();
+                    })();
                 } else {
                     alert('当前不需要签到');
                 }
@@ -585,6 +649,12 @@
         debugLog('签到页面:', CONFIG.signInUrl);
         debugLog('是否在签到页面:', isSignInPage);
         debugLog('上次自动检查时间:', formatTime(lastCheckTime));
+        
+        // 检查是否是登录页面，如果是则不执行任何操作
+        if (window.location.pathname.includes('/e/member/login/')) {
+            debugLog('当前是登录页面，脚本不执行任何操作');
+            return;
+        }
 
         // 如果在签到页面，则尝试签到
         if (isSignInPage) {
@@ -597,7 +667,9 @@
         // 如果不在签到页面，但需要签到，则打开签到页面
         if (needToSign) {
             debugLog('需要签到且不在签到页面，准备打开签到页面');
-            openSignInPage();
+            (async () => {
+                await openSignInPage();
+            })();
             return;
         }
 
@@ -617,7 +689,9 @@
                 // 如果需要签到，打开签到页面
                 if (needToSign) {
                     debugLog('定期检查发现需要签到，准备打开签到页面');
-                    openSignInPage();
+                    (async () => {
+                        await openSignInPage();
+                    })();
                 } else {
                     debugLog('定期检查发现不需要签到');
                 }
@@ -634,8 +708,8 @@
      * 脚本的入口点。
      * 在页面加载完成后执行主函数，并根据配置和当前页面状态决定是否添加调试面板。
      */
-    // 如果在签到页面，添加调试面板
-    if (isSignInPage && CONFIG.debugMode) {
+    // 如果在签到页面且不是登录页面，添加调试面板
+    if (isSignInPage && CONFIG.debugMode && !window.location.pathname.includes('/e/member/login/')) {
         // 等待页面加载完成后添加调试面板
         setTimeout(() => {
             const panel = addDebugPanel();
